@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "ae2extensions",
+  "version": "${version}",
+  "name": "ae2extensions",
+  "description": "Adds extensions to the wireless terminal by having it open in the background",
+  "authors": [
+    "rsv"
+  ],
+  "contact": {
+    "repo": "https://github.com/RTTV/ae2extensions"
+  },
+  "license": "MPL-2.0",
+  "icon": "assets/ae2extensions/icon.png",
+  "environment": "client",
+  "entrypoints": {},
+  "mixins": [
+    "ae2extensions.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=${loader_version}",
+    "minecraft": "${minecraft_version}",
+    "ae2": "*",
+    "fabric": "*"
+  }
+}
