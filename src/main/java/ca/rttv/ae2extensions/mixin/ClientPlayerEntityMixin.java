@@ -42,7 +42,7 @@ public class ClientPlayerEntityMixin {
             }
         }
 
-        if (AE2Extensions.isTerminalActive() && now - lastActionExecutionMillis.get() > 500) {
+        if (AE2Extensions.isTerminalActive() && now - lastActionExecutionMillis.get() > AE2Extensions.NO_ACTIONS_IDLE_COOLDOWN) {
             AE2Extensions.closeTerminalScreen();
         }
     }

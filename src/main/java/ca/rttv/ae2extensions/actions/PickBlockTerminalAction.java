@@ -9,11 +9,7 @@ import net.minecraft.entity.player.PlayerInventory;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 
-import static ca.rttv.ae2extensions.InteractionHelper.clickInventorySlot;
-import static ca.rttv.ae2extensions.InteractionHelper.inventoryMainIdToTerminalId;
-import static ca.rttv.ae2extensions.InteractionHelper.inventorySlotIntoTerminal;
-import static ca.rttv.ae2extensions.InteractionHelper.selectHotbarSlot;
-import static ca.rttv.ae2extensions.InteractionHelper.swapInventoryAndHotbarSlots;
+import static ca.rttv.ae2extensions.InteractionHelper.*;
 
 public class PickBlockTerminalAction implements TerminalAction {
     private final ItemStack targetStack;

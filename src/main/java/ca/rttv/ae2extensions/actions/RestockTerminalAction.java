@@ -12,13 +12,23 @@ import net.minecraft.util.collection.DefaultedList;
 
 import java.util.Arrays;
 
-import static ca.rttv.ae2extensions.InteractionHelper.terminalSlotIntoMisc;
+import static ca.rttv.ae2extensions.InteractionHelper.*;
 
 public class RestockTerminalAction implements TerminalAction {
     private final Item[] items;
 
     public RestockTerminalAction(Item... items) {
         this.items = items;
+    }
+
+    public boolean contains(Item item) {
+        for (Item entry : items) {
+            if (entry == item) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     @Override

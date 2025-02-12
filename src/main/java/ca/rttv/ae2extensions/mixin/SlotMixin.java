@@ -30,7 +30,7 @@ public class SlotMixin {
             Item item = getStack().getItem();
             getStack().setCount(countBefore);
 
-            if (AE2Extensions.isRestockActive && AE2Extensions.restockItems.contains(item)) {
+            if (AE2Extensions.isRestockActive && AE2Extensions.restockItems.contains(item) && AE2Extensions.actions.stream().noneMatch(action -> action instanceof RestockTerminalAction restock && restock.contains(item))) {
                 AE2Extensions.addTerminalAction(new RestockTerminalAction(item));
             }
         }

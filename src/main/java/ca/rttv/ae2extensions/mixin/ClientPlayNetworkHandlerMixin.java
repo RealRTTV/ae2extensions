@@ -71,6 +71,8 @@ public class ClientPlayNetworkHandlerMixin {
     private void onGameMessage(GameMessageS2CPacket packet, CallbackInfo ci) {
         if (packet.overlay() && packet.content().getContent() instanceof TranslatableTextContent translate && Arrays.asList(AE2Extensions.FAILED_CONNECTION_TRANSLATES).contains(translate.getKey())) {
             AE2Extensions.lastFailedTerminalAttempt = System.currentTimeMillis();
+            AE2Extensions.closeTerminalScreen();
+            AE2Extensions.requestingTerminal = false;
         }
     }
 }

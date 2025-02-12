@@ -1,10 +1,11 @@
 package ca.rttv.ae2extensions;
 
+import appeng.api.features.HotkeyAction;
+import appeng.core.sync.BasePacketHandler;
 import appeng.menu.me.common.GridInventoryEntry;
 import ca.rttv.ae2extensions.actions.RestockTerminalAction;
 import ca.rttv.ae2extensions.actions.ShelveTerminalAction;
 import ca.rttv.ae2extensions.actions.TerminalAction;
-import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
 import com.google.gson.stream.JsonReader;
@@ -33,12 +34,18 @@ import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.util.*;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Queue;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 public class AE2Extensions {
     public static final long FAILED_TERMINAL_REQUEST_COOLDOWN = 30_000;
     public static final long RESTOCK_COOLDOWN = 30_000;
+    public static final long NO_ACTIONS_IDLE_COOLDOWN = 15_000;
 
     public static boolean isHotkeyEnabled = false;
     public static boolean isDevNullActive = false;
@@ -73,22 +80,20 @@ public class AE2Extensions {
         long now = System.currentTimeMillis();
         if (isTerminalOpen() || requestingTerminal || client.currentScreen != null || now - lastFailedTerminalAttempt < FAILED_TERMINAL_REQUEST_COOLDOWN) return;
         PacketByteBuf buf = new PacketByteBuf(Unpooled.buffer());
-        int terminalIndex = -1;
         DefaultedList<ItemStack> inventory = client.player.getInventory().main;
-        for (int i = 0; i < inventory.size(); i++) {
-            Identifier id = Registries.ITEM.getId(inventory.get(i).getItem());
-            if (id.equals(new Identifier("ae2:wireless_terminal")) || id.equals(new Identifier("ae2:wireless_crafting_terminal"))) {
-                terminalIndex = i;
-                break;
+        a: {
+            for (ItemStack stack : inventory) {
+                Identifier id = Registries.ITEM.getId(stack.getItem());
+                if (id.equals(new Identifier("ae2:wireless_terminal")) || id.equals(new Identifier("ae2:wireless_crafting_terminal"))) {
+                    break a;
+                }
             }
-        }
-        if (terminalIndex == -1) {
             lastFailedTerminalAttempt = now;
             return;
         }
-        buf.writeInt(terminalIndex + 10);
-        buf.writeByte("wireless_terminal".length());
-        buf.writeBytes("wireless_terminal".getBytes(StandardCharsets.UTF_8));
+        buf.writeInt(BasePacketHandler.PacketTypes.HOTKEY.getPacketId());
+        buf.writeVarInt(HotkeyAction.WIRELESS_TERMINAL.length());
+        buf.writeBytes(HotkeyAction.WIRELESS_TERMINAL.getBytes(StandardCharsets.UTF_8));
         client.getNetworkHandler().sendPacket(new CustomPayloadC2SPacket(new Identifier("ae2:m"), buf));
         requestingTerminal = true;
     }
@@ -98,6 +103,7 @@ public class AE2Extensions {
     }
 
     public static void addTerminalAction(TerminalAction action) {
+        lastFailedTerminalAttempt = 0;
         AE2Extensions.actions.add(action);
     }
 
@@ -145,7 +151,6 @@ public class AE2Extensions {
                     ]
                 }
                 """);
-            writer.close();
         } catch (IOException e) {
             LOGGER.error("Error writing config file: ", e);
         }
@@ -174,11 +179,12 @@ public class AE2Extensions {
                     .stream()
                     .map(element -> Registries.ITEM.get(new Identifier(element.getAsJsonPrimitive().getAsString())))
                     .collect(Collectors.toSet());
+
+                break;
             } catch (Exception e) {
                 LOGGER.error("Error parsing config file: ", e);
                 writeDefaultConfig();
             }
-            break;
         }
     }
 
