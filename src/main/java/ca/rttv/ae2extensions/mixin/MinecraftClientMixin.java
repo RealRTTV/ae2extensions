@@ -19,17 +19,17 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(MinecraftClient.class)
-public abstract class MinecraftClientMixin {
+public class MinecraftClientMixin {
     @Shadow @Nullable public ClientPlayerEntity player;
 
     @Shadow @Nullable public Screen currentScreen;
 
-    @Shadow public abstract void setScreen(@Nullable Screen screen);
+    @Shadow public native void setScreen(@Nullable Screen screen);
 
     @Inject(method = "setScreen", at = @At("TAIL"))
     private void setScreen(Screen screen, CallbackInfo ci) {
         long now = System.currentTimeMillis();
-        if ((Object) screen instanceof MEStorageScreen<?> && AE2Extensions.isHotkeyEnabled && AE2Extensions.terminalScreen == null && AE2Extensions.requestingTerminal) {
+        if (screen instanceof MEStorageScreen<?> && AE2Extensions.isHotkeyEnabled && !AE2Extensions.isTerminalOpen() && AE2Extensions.requestingTerminal) {
             player.currentScreenHandler = player.playerScreenHandler;
             AE2Extensions.terminalScreen = (HandledScreen<?>) screen;
             AE2Extensions.terminalScreenPacketTimestamp = now;
@@ -44,7 +44,7 @@ public abstract class MinecraftClientMixin {
     private int doItemPick(int slot, @Cancellable CallbackInfo ci, @Local ItemStack targetStack) {
         if (slot == -1 && !player.getAbilities().creativeMode && AE2Extensions.isHotkeyEnabled) {
             ci.cancel();
-            AE2Extensions.actions.add(new PickBlockTerminalAction(targetStack));
+            AE2Extensions.addTerminalAction(new PickBlockTerminalAction(targetStack));
         }
         return slot;
     }

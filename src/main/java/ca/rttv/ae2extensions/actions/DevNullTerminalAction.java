@@ -31,16 +31,16 @@ public class DevNullTerminalAction implements TerminalAction {
         final ScreenHandler handler = AE2Extensions.getTerminalScreenHandler();
 
         for (Pair<Integer, Integer> entry : reductionMap) {
-            OptionalInt slotOpt = playerInventoryToTerminal(entry.getLeft());
+            OptionalInt slotOpt = inventorySlotIdToTerminalSlotId(entry.getLeft());
             if (slotOpt.isEmpty()) continue;
             int slot = slotOpt.getAsInt();
             int reduction = entry.getRight();
             ItemStack stack = handler.getSlot(slot).getStack();
             if (reduction == stack.getCount()) {
-                slotToTerminal(slot);
+                inventorySlotIntoTerminal(slot);
             } else {
-                slotToCursor(slot, reduction);
-                cursorToTerminal();
+                inventorySlotOntoCursorStack(slot, reduction);
+                cursorStackIntoTerminal();
             }
         }
     }

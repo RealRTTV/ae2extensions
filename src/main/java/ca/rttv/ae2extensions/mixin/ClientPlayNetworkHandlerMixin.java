@@ -63,7 +63,7 @@ public class ClientPlayNetworkHandlerMixin {
     @Inject(method = "onScreenHandlerSlotUpdate", at = @At("RETURN"))
     private void onScreenHandlerSlotUpdateTail(ScreenHandlerSlotUpdateS2CPacket packet, CallbackInfo ci, @Share("previousSlots") LocalRef<List<ItemStack>> previousSlots) {
         if (previousSlots.get() != null) {
-            AE2Extensions.actions.add(new DevNullTerminalAction(previousSlots.get(), client.player.playerScreenHandler.slots.stream().map(Slot::getStack).toList()));
+            AE2Extensions.addTerminalAction(new DevNullTerminalAction(previousSlots.get(), client.player.playerScreenHandler.slots.stream().map(Slot::getStack).toList()));
         }
     }
 

@@ -6,7 +6,8 @@
   "mixins": [
     "ClientPlayerEntityMixin",
     "GuiDataSyncPacketMixin",
-    "MEInventoryUpdatePacketMixin"
+    "MEInventoryUpdatePacketMixin",
+    "SlotMixin"
   ],
   "client": [
     "ClientPlayNetworkHandlerMixin",

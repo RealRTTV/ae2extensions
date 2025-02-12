@@ -9,7 +9,11 @@ import net.minecraft.entity.player.PlayerInventory;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 
-import static ca.rttv.ae2extensions.InteractionHelper.*;
+import static ca.rttv.ae2extensions.InteractionHelper.clickInventorySlot;
+import static ca.rttv.ae2extensions.InteractionHelper.inventoryMainIdToTerminalId;
+import static ca.rttv.ae2extensions.InteractionHelper.inventorySlotIntoTerminal;
+import static ca.rttv.ae2extensions.InteractionHelper.selectHotbarSlot;
+import static ca.rttv.ae2extensions.InteractionHelper.swapInventoryAndHotbarSlots;
 
 public class PickBlockTerminalAction implements TerminalAction {
     private final ItemStack targetStack;
@@ -25,26 +29,27 @@ public class PickBlockTerminalAction implements TerminalAction {
 
         for (GridInventoryEntry entry : AE2Extensions.terminalEntries) {
             if (entry.getWhat() instanceof AEItemKey key) {
-                Item item = (Item) (Object) key.getItem();
+                Item item = key.getItem();
                 if (targetStack.isOf(item)) {
-                    InteractionHelper.terminalToCursor(entry);
+                    InteractionHelper.terminalSlotOntoCursor(entry);
 
-                    int slot = inventory.getSwappableHotbarSlot();
+                    int slotId = inventory.getSwappableHotbarSlot();
+                    int terminalSlotId = inventoryMainIdToTerminalId(slotId);
                     // empty slot in hotbar
-                    if (PlayerInventory.isValidHotbarIndex(slot) && inventory.main.get(slot).isEmpty()) {
-                        clickSlot(mainToTerminal(slot));
-                        selectSlot(mainToTerminal(slot));
+                    if (PlayerInventory.isValidHotbarIndex(slotId) && inventory.main.get(slotId).isEmpty()) {
+                        clickInventorySlot(terminalSlotId);
+                        selectHotbarSlot(terminalSlotId);
                     } else {
-                        slot = inventory.getEmptySlot();
+                        slotId = inventory.getEmptySlot();
                         // empty slot in inventory
-                        if (slot != -1 && PlayerInventory.isValidHotbarIndex(inventory.selectedSlot)) {
-                            clickSlot(mainToTerminal(slot));
-                            swapSlot(mainToTerminal(slot), inventory.selectedSlot);
+                        if (slotId != -1 && PlayerInventory.isValidHotbarIndex(inventory.selectedSlot)) {
+                            clickInventorySlot(terminalSlotId);
+                            swapInventoryAndHotbarSlots(terminalSlotId, inventory.selectedSlot);
                         }
                         // no empty slot, swap from selected slot
                         else if (PlayerInventory.isValidHotbarIndex(inventory.selectedSlot)) {
-                            slotToTerminal(mainToTerminal(slot));
-                            clickSlot(mainToTerminal(slot));
+                            inventorySlotIntoTerminal(terminalSlotId);
+                            clickInventorySlot(terminalSlotId);
                         } else {
                             AE2Extensions.LOGGER.warn("Could not AE2 pick-block");
                         }

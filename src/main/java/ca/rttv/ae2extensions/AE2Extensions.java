@@ -31,23 +31,27 @@ import org.slf4j.Logger;
 import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.stream.Collectors;
 
 public class AE2Extensions {
+    public static final long FAILED_TERMINAL_REQUEST_COOLDOWN = 30_000;
+    public static final long RESTOCK_COOLDOWN = 30_000;
+
     public static boolean isHotkeyEnabled = false;
     public static boolean isDevNullActive = false;
     public static boolean isRestockActive = false;
     @Nullable
     public static HandledScreen<?> terminalScreen = null;
-    public static List<GridInventoryEntry> terminalEntries = new ArrayList<>();
     public static long terminalScreenPacketTimestamp = 0;
     public static long lastFailedTerminalAttempt = 0;
     public static boolean requestingTerminal = false;
     public static Set<Item> devNullItems = new HashSet<>();
     public static Set<Item> restockItems = new HashSet<>();
-    public static long lastRestock = 0;
+    public static long lastRestockAttempt = 0;
+    public static final List<GridInventoryEntry> terminalEntries = new ArrayList<>();
     public static final Queue<TerminalAction> actions = new ArrayDeque<>();
 
     public static final File CONFIG_FILE = new File(".", "config/ae2extensions.json");
@@ -67,7 +71,7 @@ public class AE2Extensions {
     public static void openTerminal() {
         final MinecraftClient client = MinecraftClient.getInstance();
         long now = System.currentTimeMillis();
-        if (terminalScreen != null || requestingTerminal || client.currentScreen != null || now - lastFailedTerminalAttempt < 60_000) return;
+        if (isTerminalOpen() || requestingTerminal || client.currentScreen != null || now - lastFailedTerminalAttempt < FAILED_TERMINAL_REQUEST_COOLDOWN) return;
         PacketByteBuf buf = new PacketByteBuf(Unpooled.buffer());
         int terminalIndex = -1;
         DefaultedList<ItemStack> inventory = client.player.getInventory().main;
@@ -78,12 +82,23 @@ public class AE2Extensions {
                 break;
             }
         }
-        if (terminalIndex == -1) return;
+        if (terminalIndex == -1) {
+            lastFailedTerminalAttempt = now;
+            return;
+        }
         buf.writeInt(terminalIndex + 10);
         buf.writeByte("wireless_terminal".length());
         buf.writeBytes("wireless_terminal".getBytes(StandardCharsets.UTF_8));
         client.getNetworkHandler().sendPacket(new CustomPayloadC2SPacket(new Identifier("ae2:m"), buf));
         requestingTerminal = true;
+    }
+
+    public static boolean isTerminalOpen() {
+        return terminalScreen != null;
+    }
+
+    public static void addTerminalAction(TerminalAction action) {
+        AE2Extensions.actions.add(action);
     }
 
     public static void onDevNullKeyPressed() {
@@ -97,7 +112,7 @@ public class AE2Extensions {
     public static void onShelveKeyPressed() {
         final MinecraftClient client = MinecraftClient.getInstance();
         if (client.player != null && isHotkeyEnabled && PlayerInventory.isValidHotbarIndex(client.player.getInventory().selectedSlot)) {
-            AE2Extensions.actions.add(new ShelveTerminalAction(client.player.getInventory().selectedSlot));
+            addTerminalAction(new ShelveTerminalAction(client.player.getInventory().selectedSlot));
         }
     }
 
@@ -107,9 +122,63 @@ public class AE2Extensions {
             isRestockActive = !isRestockActive;
             client.inGameHud.setOverlayMessage(Text.literal("AE2 Restock: ").append(Text.literal(isRestockActive ? "On" : "Off").styled(style -> style.withColor(isRestockActive ? Formatting.GREEN : Formatting.RED))), false);
             if (isRestockActive) {
-                AE2Extensions.actions.add(new RestockTerminalAction(restockItems.toArray(Item[]::new)));
-                lastRestock = System.currentTimeMillis();
+                addTerminalAction(new RestockTerminalAction(restockItems.toArray(Item[]::new)));
+                lastRestockAttempt = System.currentTimeMillis();
             }
+        }
+    }
+
+    private static void writeDefaultConfig() {
+        try (FileWriter writer = new FileWriter(CONFIG_FILE)) {
+            writer.write("""
+                {
+                    "/dev/null/": [
+                        "minecraft:cobblestone",
+                        "minecraft:stone",
+                        "minecraft:dirt",
+                        "minecraft:deepslate",
+                        "minecraft:cobbled_deepslate"
+                    ],
+                    "restock": [
+                        "minecraft:golden_carrot",
+                        "minecraft:firework_rocket"
+                    ]
+                }
+                """);
+            writer.close();
+        } catch (IOException e) {
+            LOGGER.error("Error writing config file: ", e);
+        }
+    }
+
+    public static void refreshConfig() {
+        File dir = new File(".", "config");
+
+        while (true) {
+            try {
+                if ((dir.exists() && dir.isDirectory() || dir.mkdirs()) && (!CONFIG_FILE.exists() && CONFIG_FILE.createNewFile())) {
+                    writeDefaultConfig();
+                }
+
+                FileReader reader = new FileReader(CONFIG_FILE);
+                JsonElement json = JsonParser.parseReader(new JsonReader(reader));
+                reader.close();
+                devNullItems = json.getAsJsonObject()
+                    .getAsJsonArray("/dev/null")
+                    .asList()
+                    .stream()
+                    .map(element -> Registries.ITEM.get(new Identifier(element.getAsJsonPrimitive().getAsString())))
+                    .collect(Collectors.toSet());
+                restockItems = json.getAsJsonObject().getAsJsonArray("restock")
+                    .asList()
+                    .stream()
+                    .map(element -> Registries.ITEM.get(new Identifier(element.getAsJsonPrimitive().getAsString())))
+                    .collect(Collectors.toSet());
+            } catch (Exception e) {
+                LOGGER.error("Error parsing config file: ", e);
+                writeDefaultConfig();
+            }
+            break;
         }
     }
 
@@ -119,49 +188,9 @@ public class AE2Extensions {
             isHotkeyEnabled = !isHotkeyEnabled;
             client.inGameHud.setOverlayMessage(Text.literal("AE2 Extensions: ").append(Text.literal(isHotkeyEnabled ? "On" : "Off").styled(style -> style.withColor(isHotkeyEnabled ? Formatting.GREEN : Formatting.RED))), false);
             if (isHotkeyEnabled) {
-                File dir = new File(".", "config");
-                try {
-                    if ((dir.exists() && dir.isDirectory()) || dir.mkdirs() && (!CONFIG_FILE.exists() && CONFIG_FILE.createNewFile())) {
-                        FileWriter writer = new FileWriter(CONFIG_FILE);
-                        writer.write("""
-                            {
-                                "valid_items": [
-                                    "minecraft:cobblestone",
-                                    "minecraft:stone",
-                                    "minecraft:dirt",
-                                    "minecraft:deepslate",
-                                    "minecraft:cobbled_deepslate"
-                                ],
-                                "restock": [
-                                    "minecraft:golden_carrot",
-                                    "minecraft:firework_rocket"
-                                ]
-                            }
-                            """);
-                        writer.close();
-                    }
-
-                    if (CONFIG_FILE.exists() && CONFIG_FILE.isFile() && CONFIG_FILE.canRead()) {
-                        FileReader reader = new FileReader(CONFIG_FILE);
-                        JsonElement json = JsonParser.parseReader(new JsonReader(reader));
-                        reader.close();
-                        devNullItems = json.getAsJsonObject()
-                            .getAsJsonArray("valid_items")
-                            .asList()
-                            .stream()
-                            .map(element -> Registries.ITEM.get(new Identifier(element.getAsJsonPrimitive().getAsString())))
-                            .collect(Collectors.toSet());
-                        restockItems = Objects.requireNonNullElseGet(json.getAsJsonObject().getAsJsonArray("restock"), JsonArray::new)
-                            .asList()
-                            .stream()
-                            .map(element -> Registries.ITEM.get(new Identifier(element.getAsJsonPrimitive().getAsString())))
-                            .collect(Collectors.toSet());
-                    }
-                } catch (Exception e) {
-                    LOGGER.error("Error parsing config file: ", e);
-                }
+                refreshConfig();
             } else {
-                if (terminalScreen != null) {
+                if (isTerminalOpen()) {
                     getTerminalScreen().removed();
                     closeTerminalScreen();
                 }
@@ -170,14 +199,15 @@ public class AE2Extensions {
                 isRestockActive = false;
                 terminalScreenPacketTimestamp = 0;
                 lastFailedTerminalAttempt = 0;
-                lastRestock = 0;
+                lastRestockAttempt = 0;
+                actions.clear();
             }
         }
     }
 
     @Nullable
     public static ScreenHandler getTerminalScreenHandler() {
-        if (terminalScreen == null) {
+        if (!isTerminalOpen()) {
             return null;
         }
 
@@ -190,7 +220,7 @@ public class AE2Extensions {
     }
 
     public static void closeTerminalScreen() {
-        if (terminalScreen != null) {
+        if (isTerminalOpen()) {
             MinecraftClient.getInstance().getNetworkHandler().sendPacket(new CloseHandledScreenC2SPacket(terminalScreen.getScreenHandler().syncId));
             terminalScreen = null;
         }
@@ -199,7 +229,7 @@ public class AE2Extensions {
     public static boolean isTerminalActive() {
         long now = System.currentTimeMillis();
 
-        if (isHotkeyEnabled && terminalScreen != null && now - terminalScreenPacketTimestamp > getScreenPacketCooldown()) {
+        if (isHotkeyEnabled && isTerminalOpen() && now - terminalScreenPacketTimestamp > getScreenPacketCooldown()) {
             AE2Extensions.requestingTerminal = false;
             return true;
         } else {
@@ -223,12 +253,12 @@ public class AE2Extensions {
         if (!isHotkeyEnabled) {
             return ExtensionsState.DISABLED;
         } else if (actions.isEmpty()) {
-            return terminalScreen == null ? ExtensionsState.IDLE : ExtensionsState.IDLE_OPEN_SCREEN;
+            return isTerminalOpen() ? ExtensionsState.IDLE_OPEN_SCREEN : ExtensionsState.IDLE;
         } else if (requestingTerminal) {
             return ExtensionsState.AWAITING_SCREEN;
         } else if (now - terminalScreenPacketTimestamp <= getScreenPacketCooldown()) {
             return ExtensionsState.AWAITING_OPENING_COOLDOWN;
-        } else if (now - lastFailedTerminalAttempt <= 60_000) {
+        } else if (now - lastFailedTerminalAttempt <= FAILED_TERMINAL_REQUEST_COOLDOWN) {
             return ExtensionsState.AWAITING_FAILED_COOLDOWN;
         } else {
             return ExtensionsState.INVALID;

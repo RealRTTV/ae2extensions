@@ -12,12 +12,13 @@ import org.spongepowered.asm.mixin.injection.ModifyArg;
 @Mixin(GameOptions.class)
 public class GameOptionsMixin implements GameOptionsDuck {
     @Unique
-    private final KeyBinding extensionsKey = new KeyBinding("key.extensions", GLFW.GLFW_KEY_LEFT_BRACKET, "key.categories.inventory");
+    private final KeyBinding extensionsKey = new KeyBinding("key.extensions", GLFW.GLFW_KEY_LEFT_BRACKET, "key.ae2.category");
     @Unique
-    private final KeyBinding devnullKey = new KeyBinding("key.devnull", GLFW.GLFW_KEY_RIGHT_BRACKET, "key.categories.inventory");
+    private final KeyBinding devnullKey = new KeyBinding("key.devnull", GLFW.GLFW_KEY_RIGHT_BRACKET, "key.ae2.category");
     @Unique
-    private final KeyBinding shelveKey = new KeyBinding("key.shelve", GLFW.GLFW_KEY_GRAVE_ACCENT, "key.categories.inventory");
-    private final KeyBinding restockKey = new KeyBinding("key.restock", GLFW.GLFW_KEY_APOSTROPHE, "key.categories.inventory");
+    private final KeyBinding shelveKey = new KeyBinding("key.shelve", GLFW.GLFW_KEY_GRAVE_ACCENT, "key.ae2.category");
+    @Unique
+    private final KeyBinding restockKey = new KeyBinding("key.restock", GLFW.GLFW_KEY_APOSTROPHE, "key.ae2.category");
 
     @Override
     public KeyBinding ae2extensions$getExtensionsKey() {

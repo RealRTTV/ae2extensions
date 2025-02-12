@@ -26,7 +26,6 @@ dependencies {
     modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
     modImplementation(files "libs/appliedenergistics2-fabric-15.1.0.jar")
     implementation(files "libs/client-intermediary.jar")
-    include(implementation(annotationProcessor("io.github.llamalad7:mixinextras-fabric:0.4.0-beta.2")))
 }
 
 processResources {

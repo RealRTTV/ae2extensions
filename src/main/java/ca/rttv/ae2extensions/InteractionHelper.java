@@ -33,7 +33,7 @@ public class InteractionHelper {
      * <p>
      * {@code false} otherwise
      */
-    public static boolean clickSlot(int slot) {
+    public static boolean clickInventorySlot(int slot) {
         if (!AE2Extensions.isTerminalActive()) return onTerminalInactive();
 
         final MinecraftClient client = MinecraftClient.getInstance();
@@ -89,7 +89,7 @@ public class InteractionHelper {
      * <p>
      * {@code false} otherwise
      */
-    public static boolean slotToCursor(int slot, int quantity) {
+    public static boolean inventorySlotOntoCursorStack(int slot, int quantity) {
         final MinecraftClient client = MinecraftClient.getInstance();
         final ScreenHandler handler = AE2Extensions.getTerminalScreenHandler();
 
@@ -161,7 +161,7 @@ public class InteractionHelper {
      * <p>
      * {@code false} otherwise
      */
-    public static boolean swapSlot(int slot, int hotbarSlot) {
+    public static boolean swapInventoryAndHotbarSlots(int slot, int hotbarSlot) {
         if (!PlayerInventory.isValidHotbarIndex(hotbarSlot)) {
             AE2Extensions.LOGGER.warn("Tried to interact with an invalid hotbar slot. ({})", getCallerMethodName());
             return false;
@@ -194,7 +194,7 @@ public class InteractionHelper {
      * <p>
      * {@code false} otherwise
      */
-    public static boolean selectSlot(int slot) {
+    public static boolean selectHotbarSlot(int slot) {
         final MinecraftClient client = MinecraftClient.getInstance();
         final PlayerInventory inventory = client.player.getInventory();
 
@@ -223,7 +223,7 @@ public class InteractionHelper {
      * <p>
      * {@code false} otherwise
      */
-    public static boolean cursorToTerminal() {
+    public static boolean cursorStackIntoTerminal() {
         if (!AE2Extensions.isTerminalActive()) return onTerminalInactive();
 
         final MinecraftClient client = MinecraftClient.getInstance();
@@ -258,7 +258,7 @@ public class InteractionHelper {
      * <p>
      * {@code false} otherwise
      */
-    public static boolean slotToTerminal(int slot) {
+    public static boolean inventorySlotIntoTerminal(int slot) {
         if (!AE2Extensions.isTerminalActive()) return onTerminalInactive();
 
         final MinecraftClient client = MinecraftClient.getInstance();
@@ -293,7 +293,7 @@ public class InteractionHelper {
      * @param action The action to perform
      * @return {@code true} if the AE2 Extensions terminal is active; {@code false} otherwise
      */
-    public static boolean terminalTo(long serial, InventoryAction action, Runnable slotUpdateCallback) {
+    public static boolean terminalSlotIntoMisc(long serial, InventoryAction action, Runnable slotUpdateCallback) {
         if (!AE2Extensions.isTerminalActive()) return onTerminalInactive();
 
         final MinecraftClient client = MinecraftClient.getInstance();
@@ -324,7 +324,7 @@ public class InteractionHelper {
      * <p>
      * {@code false} otherwise
      */
-    public static boolean terminalToCursor(GridInventoryEntry entry) {
+    public static boolean terminalSlotOntoCursor(GridInventoryEntry entry) {
         if (!AE2Extensions.isTerminalActive()) return onTerminalInactive();
 
         final MinecraftClient client = MinecraftClient.getInstance();
@@ -346,12 +346,12 @@ public class InteractionHelper {
         buf.writeEnumConstant(InventoryAction.PICKUP_OR_SET_DOWN);
         client.getNetworkHandler().sendPacket(new CustomPayloadC2SPacket(new Identifier("ae2:m"), buf));
 
-        handler.setCursorStack((ItemStack) (Object) key.toStack((int) Math.min(key.getMaxStackSize(), entry.getStoredAmount())));
+        handler.setCursorStack(key.toStack((int) Math.min(key.getMaxStackSize(), entry.getStoredAmount())));
 
         return true;
     }
 
-    public static OptionalInt playerInventoryToTerminal(int slot) {
+    public static OptionalInt inventorySlotIdToTerminalSlotId(int slot) {
         if (slot < 5) {
             // crafting
             return OptionalInt.empty();
@@ -375,7 +375,7 @@ public class InteractionHelper {
         return OptionalInt.empty();
     }
 
-    public static int mainToTerminal(int slot) {
+    public static int inventoryMainIdToTerminalId(int slot) {
         return slot + 21;
     }
     

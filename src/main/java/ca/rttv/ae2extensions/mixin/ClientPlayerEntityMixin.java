@@ -16,24 +16,24 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(ClientPlayerEntity.class)
 public class ClientPlayerEntityMixin {
     @Inject(method = "tick", at = @At("HEAD"))
-    private void tick(CallbackInfo ci, @Share("lastActionExecution") LocalLongRef lastActionExecution) {
+    private void tick(CallbackInfo ci, @Share("lastActionExecutionMillis") LocalLongRef lastActionExecutionMillis) {
         long now = System.currentTimeMillis();
 
-        if (AE2Extensions.isHotkeyEnabled && AE2Extensions.isRestockActive && now - AE2Extensions.lastRestock > 60_000 && AE2Extensions.actions.stream().noneMatch(action -> action instanceof RestockTerminalAction)) {
-            AE2Extensions.actions.add(new RestockTerminalAction(AE2Extensions.restockItems.toArray(Item[]::new)));
-            AE2Extensions.lastRestock = now;
+        if (AE2Extensions.isHotkeyEnabled && AE2Extensions.isRestockActive && now - AE2Extensions.lastRestockAttempt > AE2Extensions.RESTOCK_COOLDOWN && AE2Extensions.actions.stream().noneMatch(action -> action instanceof RestockTerminalAction)) {
+            AE2Extensions.addTerminalAction(new RestockTerminalAction(AE2Extensions.restockItems.toArray(Item[]::new)));
+            AE2Extensions.lastRestockAttempt = now;
         }
 
         if (FabricLoader.getInstance().isDevelopmentEnvironment()) {
             System.out.printf("AE2 Extensions State: %s%n", AE2Extensions.getExtensionsState());
         }
 
-        if (!AE2Extensions.actions.isEmpty() && AE2Extensions.isHotkeyEnabled && AE2Extensions.terminalScreen == null) {
+        if (!AE2Extensions.actions.isEmpty() && AE2Extensions.isHotkeyEnabled && !AE2Extensions.isTerminalOpen()) {
             AE2Extensions.openTerminal();
-            lastActionExecution.set(now);
+            lastActionExecutionMillis.set(now);
         } else if (AE2Extensions.isTerminalActive()) {
             if (!AE2Extensions.actions.isEmpty()) {
-                lastActionExecution.set(now);
+                lastActionExecutionMillis.set(now);
             }
 
             TerminalAction action;
@@ -42,7 +42,7 @@ public class ClientPlayerEntityMixin {
             }
         }
 
-        if (AE2Extensions.isTerminalActive() && now - lastActionExecution.get() > 500) {
+        if (AE2Extensions.isTerminalActive() && now - lastActionExecutionMillis.get() > 500) {
             AE2Extensions.closeTerminalScreen();
         }
     }

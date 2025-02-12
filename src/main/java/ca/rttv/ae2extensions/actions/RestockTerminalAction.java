@@ -12,7 +12,7 @@ import net.minecraft.util.collection.DefaultedList;
 
 import java.util.Arrays;
 
-import static ca.rttv.ae2extensions.InteractionHelper.terminalTo;
+import static ca.rttv.ae2extensions.InteractionHelper.terminalSlotIntoMisc;
 
 public class RestockTerminalAction implements TerminalAction {
     private final Item[] items;
@@ -30,9 +30,9 @@ public class RestockTerminalAction implements TerminalAction {
             for (ItemStack stack : list) {
                 if (Arrays.asList(items).contains(stack.getItem())) {
                     for (GridInventoryEntry entry : AE2Extensions.terminalEntries) {
-                        if (entry.getWhat() instanceof AEItemKey key && ItemStack.canCombine((ItemStack) (Object) key.toStack(), stack) && stack.getCount() < stack.getMaxCount()) {
+                        if (entry.getWhat() instanceof AEItemKey key && ItemStack.canCombine(key.toStack(), stack) && stack.getCount() < stack.getMaxCount()) {
                             // it doesn't matter that we're setting this stack instead of the first applicable stack, since all stacks are covered, we'll be setting them all anyway, the order doesn't matter.
-                            terminalTo(entry.getSerial(), InventoryAction.SHIFT_CLICK, () -> stack.setCount((int) Math.min(stack.getMaxCount(), stack.getCount() + entry.getStoredAmount())));
+                            terminalSlotIntoMisc(entry.getSerial(), InventoryAction.SHIFT_CLICK, () -> stack.setCount((int) Math.min(stack.getMaxCount(), stack.getCount() + entry.getStoredAmount())));
                         }
                     }
                 }

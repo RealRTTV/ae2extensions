@@ -1,7 +1,7 @@
 package ca.rttv.ae2extensions.actions;
 
-import static ca.rttv.ae2extensions.InteractionHelper.mainToTerminal;
-import static ca.rttv.ae2extensions.InteractionHelper.slotToTerminal;
+import static ca.rttv.ae2extensions.InteractionHelper.inventoryMainIdToTerminalId;
+import static ca.rttv.ae2extensions.InteractionHelper.inventorySlotIntoTerminal;
 
 public class ShelveTerminalAction implements TerminalAction {
     private final int slot;
@@ -12,6 +12,6 @@ public class ShelveTerminalAction implements TerminalAction {
 
     @Override
     public void execute() {
-        slotToTerminal(mainToTerminal(slot));
+        inventorySlotIntoTerminal(inventoryMainIdToTerminalId(slot));
     }
 }
