@@ -138,7 +138,7 @@ public class AE2Extensions {
         try (FileWriter writer = new FileWriter(CONFIG_FILE)) {
             writer.write("""
                 {
-                    "/dev/null/": [
+                    "/dev/null": [
                         "minecraft:cobblestone",
                         "minecraft:stone",
                         "minecraft:dirt",
