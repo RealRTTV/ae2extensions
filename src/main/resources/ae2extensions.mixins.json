@@ -12,6 +12,7 @@
   "client": [
     "ClientPlayNetworkHandlerMixin",
     "GameOptionsMixin",
+    "HandledScreenMixin",
     "KeyboardMixin",
     "MinecraftClientMixin"
   ],
