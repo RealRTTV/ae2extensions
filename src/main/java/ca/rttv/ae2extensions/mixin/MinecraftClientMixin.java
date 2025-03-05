@@ -15,29 +15,25 @@ import org.jetbrains.annotations.Nullable;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.ModifyVariable;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(MinecraftClient.class)
 public class MinecraftClientMixin {
     @Shadow @Nullable public ClientPlayerEntity player;
 
-    @Shadow @Nullable public Screen currentScreen;
-
-    @Shadow public native void setScreen(@Nullable Screen screen);
-
-    @Inject(method = "setScreen", at = @At("TAIL"))
-    private void setScreen(Screen screen, CallbackInfo ci) {
+    @ModifyVariable(method = "setScreen", at = @At(value = "LOAD", ordinal = 0), index = 1, argsOnly = true)
+    private Screen changeScreen(Screen screen) {
         long now = System.currentTimeMillis();
         if (screen instanceof MEStorageScreen<?> && AE2Extensions.isHotkeyEnabled && !AE2Extensions.isTerminalOpen() && AE2Extensions.requestingTerminal) {
             player.currentScreenHandler = player.playerScreenHandler;
             AE2Extensions.terminalScreen = (HandledScreen<?>) screen;
             AE2Extensions.terminalScreenPacketTimestamp = now;
-            currentScreen = null;
-            setScreen(null);
+            return null;
         } else if (screen != null) {
             AE2Extensions.closeTerminalScreen();
         }
+        return screen;
     }
 
     @ModifyExpressionValue(method = "doItemPick", at = @At(value = "INVOKE", target = "Lnet/minecraft/entity/player/PlayerInventory;getSlotWithStack(Lnet/minecraft/item/ItemStack;)I"))
