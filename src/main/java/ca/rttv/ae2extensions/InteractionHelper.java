@@ -8,14 +8,18 @@ import io.netty.buffer.Unpooled;
 import it.unimi.dsi.fastutil.ints.Int2ObjectMaps;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.entity.player.PlayerInventory;
+import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.network.PacketByteBuf;
 import net.minecraft.network.packet.c2s.play.ClickSlotC2SPacket;
 import net.minecraft.network.packet.c2s.play.CustomPayloadC2SPacket;
 import net.minecraft.network.packet.c2s.play.UpdateSelectedSlotC2SPacket;
 import net.minecraft.screen.ScreenHandler;
+import net.minecraft.screen.slot.Slot;
 import net.minecraft.screen.slot.SlotActionType;
 import net.minecraft.util.Identifier;
+import net.minecraft.util.collection.DefaultedList;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.OptionalInt;
 
@@ -245,6 +249,17 @@ public class InteractionHelper {
         return true;
     }
 
+
+    /**
+     * Gets the stack at the specified slot
+     * @param slot The slot to get from (inventory ordinal)
+     * @return The stack at the slot
+     */
+    public static ItemStack getStackFromInventorySlot(int slot) {
+        final DefaultedList<ItemStack> main = MinecraftClient.getInstance().player.getInventory().main;
+        return main.get(slot);
+    }
+
     /**
      * Shift-clicks the slot into the terminal.
      * <p>
@@ -282,6 +297,22 @@ public class InteractionHelper {
 
         stack.setCount(0);
 
+        return true;
+    }
+
+    public static boolean moveAllIntoTerminal(Item item) {
+        if (!AE2Extensions.isTerminalActive()) return onTerminalInactive();
+
+        final MinecraftClient client = MinecraftClient.getInstance();
+        final DefaultedList<ItemStack> inventoryHandler = client.player.getInventory().main;
+
+        for (int i = 0; i < inventoryHandler.size(); i++) {
+            if (inventoryHandler.get(i).isOf(item)) {
+                if (!inventorySlotIntoTerminal(inventoryMainIdToTerminalId(i))) {
+                    return false;
+                }
+            }
+        }
         return true;
     }
 
