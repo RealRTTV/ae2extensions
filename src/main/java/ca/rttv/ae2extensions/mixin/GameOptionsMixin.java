@@ -43,12 +43,10 @@ public class GameOptionsMixin implements GameOptionsDuck {
     @SuppressWarnings("unchecked")
     @ModifyArg(method = "<init>", at = @At(value = "INVOKE", target = "Lorg/apache/commons/lang3/ArrayUtils;addAll([Ljava/lang/Object;[Ljava/lang/Object;)[Ljava/lang/Object;"), index = 0)
     private <T> T[] addAll(T[] arr) {
-        T[] keys = (T[]) new KeyBinding[arr.length + 4];
+        KeyBinding[] newKeys = new KeyBinding[]{devnullKey, extensionsKey, shelveKey, restockKey};
+        KeyBinding[] keys = new KeyBinding[arr.length + newKeys.length];
         System.arraycopy(arr, 0, keys, 0, arr.length);
-        keys[arr.length] = (T) devnullKey;
-        keys[arr.length + 1] = (T) extensionsKey;
-        keys[arr.length + 2] = (T) shelveKey;
-        keys[arr.length + 3] = (T) restockKey;
-        return keys;
+        System.arraycopy(newKeys, 0, keys, arr.length, newKeys.length);
+        return (T[]) keys;
     }
 }

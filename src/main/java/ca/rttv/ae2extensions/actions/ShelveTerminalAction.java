@@ -1,7 +1,13 @@
 package ca.rttv.ae2extensions.actions;
 
+import appeng.menu.me.common.GridInventoryEntry;
+import net.minecraft.client.gui.screen.ingame.HandledScreen;
 import net.minecraft.item.Item;
+import net.minecraft.screen.ScreenHandler;
 import org.jetbrains.annotations.Nullable;
+
+import java.util.List;
+import java.util.function.Supplier;
 
 import static ca.rttv.ae2extensions.InteractionHelper.*;
 
@@ -18,16 +24,16 @@ public class ShelveTerminalAction implements TerminalAction {
     }
 
     @Override
-    public void execute() {
+    public void execute(HandledScreen<?> screen, ScreenHandler handler, Supplier<List<GridInventoryEntry>> entries) {
         long now = System.nanoTime();
         if (lastShelveItem != null && lastShelveSlot == slot && now - lastShelve < 500_000_000L) {
-            moveAllIntoTerminal(lastShelveItem);
+            moveAllIntoTerminal(stack -> stack.isOf(lastShelveItem), handler);
             lastShelveItem = null;
             lastShelveSlot = -1;
         } else {
-            lastShelveItem = getStackFromInventorySlot(slot).getItem();
+            lastShelveItem = getPlayerInventoryMain().get(slot).getItem();
             lastShelveSlot = slot;
-            inventorySlotIntoTerminal(inventoryMainIdToTerminalId(slot));
+            quickMoveIntoTerminal(inventoryMainIdToTerminalId(slot), handler);
         }
         lastShelve = now;
     }

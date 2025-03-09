@@ -1,8 +1,11 @@
 package ca.rttv.ae2extensions;
 
 import appeng.api.features.HotkeyAction;
+import appeng.client.gui.me.common.MEStorageScreen;
+import appeng.client.gui.me.common.Repo;
 import appeng.core.sync.BasePacketHandler;
 import appeng.menu.me.common.GridInventoryEntry;
+import appeng.menu.me.common.MEStorageMenu;
 import ca.rttv.ae2extensions.actions.RestockTerminalAction;
 import ca.rttv.ae2extensions.actions.ShelveTerminalAction;
 import ca.rttv.ae2extensions.actions.TerminalAction;
@@ -12,8 +15,9 @@ import com.google.gson.stream.JsonReader;
 import com.mojang.logging.LogUtils;
 import io.netty.buffer.Unpooled;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.screen.ingame.HandledScreen;
-import net.minecraft.client.network.PlayerListEntry;
+import net.minecraft.client.network.ClientPlayerEntity;
 import net.minecraft.entity.player.PlayerInventory;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
@@ -33,13 +37,14 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayDeque;
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Queue;
 import java.util.Set;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 public class AE2Extensions {
@@ -52,13 +57,18 @@ public class AE2Extensions {
     public static boolean isRestockActive = false;
     @Nullable
     public static HandledScreen<?> terminalScreen = null;
-    public static long terminalScreenPacketTimestamp = 0;
+    @Nullable
+    private static ScreenHandler realScreenHandler = null;
+    @Nullable
+    private static Screen realScreen = null;
+    public static boolean extensionsTerminalVisible = false;
     public static long lastFailedTerminalAttempt = 0;
     public static boolean requestingTerminal = false;
+    public static int seenGuiDataSyncPackets = 0;
+    public static int seenMEInventoryUpdatePackets = 0;
     public static Set<Item> devNullItems = new HashSet<>();
     public static Set<Item> restockItems = new HashSet<>();
     public static long lastRestockAttempt = 0;
-    public static final List<GridInventoryEntry> terminalEntries = new ArrayList<>();
     public static final Queue<TerminalAction> actions = new ArrayDeque<>();
 
     public static final File CONFIG_FILE = new File(".", "config/ae2extensions.json");
@@ -73,33 +83,71 @@ public class AE2Extensions {
 
     public static void onCloseScreen() {
         terminalScreen = null;
+        requestingTerminal = false;
+        seenGuiDataSyncPackets = 0;
+        seenMEInventoryUpdatePackets = 0;
     }
 
     public static void openTerminal() {
         final MinecraftClient client = MinecraftClient.getInstance();
         long now = System.currentTimeMillis();
-        if (isTerminalOpen() || requestingTerminal || client.currentScreen != null || now - lastFailedTerminalAttempt < FAILED_TERMINAL_REQUEST_COOLDOWN) return;
-        PacketByteBuf buf = new PacketByteBuf(Unpooled.buffer());
-        DefaultedList<ItemStack> inventory = client.player.getInventory().main;
-        a: {
-            for (ItemStack stack : inventory) {
-                Identifier id = Registries.ITEM.getId(stack.getItem());
-                if (id.equals(new Identifier("ae2:wireless_terminal")) || id.equals(new Identifier("ae2:wireless_crafting_terminal"))) {
-                    break a;
-                }
+        if (getExtensionsState() != ExtensionsState.OFF) return;
+        if (client.currentScreen instanceof HandledScreen<?> handledScreen && handledScreen.getScreenHandler() instanceof MEStorageMenu) {
+            seenGuiDataSyncPackets = 2;
+            seenMEInventoryUpdatePackets = 1;
+            terminalScreen = handledScreen;
+        } else {
+            if (client.currentScreen != null) {
+                client.player.closeScreen();
             }
-            lastFailedTerminalAttempt = now;
-            return;
+            PacketByteBuf buf = new PacketByteBuf(Unpooled.buffer());
+            DefaultedList<ItemStack> inventory = client.player.getInventory().main;
+            a:
+            {
+                for (ItemStack stack : inventory) {
+                    Identifier id = Registries.ITEM.getId(stack.getItem());
+                    if (id.equals(new Identifier("ae2:wireless_terminal")) || id.equals(new Identifier("ae2:wireless_crafting_terminal"))) {
+                        break a;
+                    }
+                }
+                lastFailedTerminalAttempt = now;
+                return;
+            }
+            buf.writeInt(BasePacketHandler.PacketTypes.HOTKEY.getPacketId());
+            buf.writeVarInt(HotkeyAction.WIRELESS_TERMINAL.length());
+            buf.writeBytes(HotkeyAction.WIRELESS_TERMINAL.getBytes(StandardCharsets.UTF_8));
+            client.getNetworkHandler().sendPacket(new CustomPayloadC2SPacket(new Identifier("ae2:m"), buf));
+            requestingTerminal = true;
         }
-        buf.writeInt(BasePacketHandler.PacketTypes.HOTKEY.getPacketId());
-        buf.writeVarInt(HotkeyAction.WIRELESS_TERMINAL.length());
-        buf.writeBytes(HotkeyAction.WIRELESS_TERMINAL.getBytes(StandardCharsets.UTF_8));
-        client.getNetworkHandler().sendPacket(new CustomPayloadC2SPacket(new Identifier("ae2:m"), buf));
-        requestingTerminal = true;
     }
 
     public static boolean isTerminalOpen() {
         return terminalScreen != null;
+    }
+
+    public static void toggleTerminalScreen() {
+        if (!isTerminalOpen() || !extensionsTerminalVisible && isTerminalVisible()) {
+            return;
+        }
+
+        final MinecraftClient client = MinecraftClient.getInstance();
+        final ClientPlayerEntity player = client.player;
+
+        if (extensionsTerminalVisible) {
+            client.currentScreen = realScreen;
+            player.currentScreenHandler = realScreenHandler;
+        } else {
+            realScreen = client.currentScreen;
+            realScreenHandler = player.currentScreenHandler;
+            client.currentScreen = terminalScreen;
+            player.currentScreenHandler = terminalScreen.getScreenHandler();
+        }
+
+        extensionsTerminalVisible = !extensionsTerminalVisible;
+    }
+
+    public static boolean isTerminalVisible() {
+        return MinecraftClient.getInstance().currentScreen instanceof MEStorageScreen<?>;
     }
 
     public static void addTerminalAction(TerminalAction action) {
@@ -111,7 +159,7 @@ public class AE2Extensions {
         final MinecraftClient client = MinecraftClient.getInstance();
         if (client.player != null) {
             isDevNullActive = !isDevNullActive;
-            client.inGameHud.setOverlayMessage(Text.literal("AE2 /dev/null: ").append(Text.literal(isDevNullActive ? "On" : "Off").styled(style -> style.withColor(isDevNullActive ? Formatting.GREEN : Formatting.RED))), false);
+            client.inGameHud.setOverlayMessage(Text.literal("Terminal /dev/null: ").append(Text.literal(isDevNullActive ? "On" : "Off").styled(style -> style.withColor(isDevNullActive ? Formatting.GREEN : Formatting.RED))), false);
         }
     }
 
@@ -126,7 +174,7 @@ public class AE2Extensions {
         final MinecraftClient client = MinecraftClient.getInstance();
         if (client.player != null) {
             isRestockActive = !isRestockActive;
-            client.inGameHud.setOverlayMessage(Text.literal("AE2 Restock: ").append(Text.literal(isRestockActive ? "On" : "Off").styled(style -> style.withColor(isRestockActive ? Formatting.GREEN : Formatting.RED))), false);
+            client.inGameHud.setOverlayMessage(Text.literal("Terminal Restock: ").append(Text.literal(isRestockActive ? "On" : "Off").styled(style -> style.withColor(isRestockActive ? Formatting.GREEN : Formatting.RED))), false);
             if (isRestockActive) {
                 addTerminalAction(new RestockTerminalAction(restockItems.toArray(Item[]::new)));
                 lastRestockAttempt = System.currentTimeMillis();
@@ -192,7 +240,7 @@ public class AE2Extensions {
         final MinecraftClient client = MinecraftClient.getInstance();
         if (client.player != null) {
             isHotkeyEnabled = !isHotkeyEnabled;
-            client.inGameHud.setOverlayMessage(Text.literal("AE2 Extensions: ").append(Text.literal(isHotkeyEnabled ? "On" : "Off").styled(style -> style.withColor(isHotkeyEnabled ? Formatting.GREEN : Formatting.RED))), false);
+            client.inGameHud.setOverlayMessage(Text.literal("Terminal Extensions: ").append(Text.literal(isHotkeyEnabled ? "On" : "Off").styled(style -> style.withColor(isHotkeyEnabled ? Formatting.GREEN : Formatting.RED))), false);
             if (isHotkeyEnabled) {
                 refreshConfig();
             } else {
@@ -203,9 +251,10 @@ public class AE2Extensions {
 
                 isDevNullActive = false;
                 isRestockActive = false;
-                terminalScreenPacketTimestamp = 0;
                 lastFailedTerminalAttempt = 0;
                 lastRestockAttempt = 0;
+                seenGuiDataSyncPackets = 0;
+                seenMEInventoryUpdatePackets = 0;
                 actions.clear();
             }
         }
@@ -213,11 +262,7 @@ public class AE2Extensions {
 
     @Nullable
     public static ScreenHandler getTerminalScreenHandler() {
-        if (!isTerminalOpen()) {
-            return null;
-        }
-
-        return terminalScreen.getScreenHandler();
+        return terminalScreen == null ? null : terminalScreen.getScreenHandler();
     }
 
     @Nullable
@@ -229,66 +274,90 @@ public class AE2Extensions {
         if (isTerminalOpen()) {
             MinecraftClient.getInstance().getNetworkHandler().sendPacket(new CloseHandledScreenC2SPacket(terminalScreen.getScreenHandler().syncId));
             terminalScreen = null;
+            extensionsTerminalVisible = false;
+            seenGuiDataSyncPackets = 0;
+            seenMEInventoryUpdatePackets = 0;
         }
     }
 
     public static boolean isTerminalActive() {
-        long now = System.currentTimeMillis();
-
-        if (isHotkeyEnabled && isTerminalOpen() && now - terminalScreenPacketTimestamp > getScreenPacketCooldown()) {
-            AE2Extensions.requestingTerminal = false;
-            return true;
-        } else {
-            return false;
-        }
+        return getExtensionsState() == ExtensionsState.ACTIVE;
     }
 
     public static boolean isDevNullStack(ItemStack stack) {
         return devNullItems.contains(stack.getItem());
     }
 
-    public static int getScreenPacketCooldown() {
+    public static void onSeenTerminalDataPacket() {
+        requestingTerminal = false;
+
+        if (isTerminalActive() && !((MEStorageMenu) getTerminalScreenHandler()).hasPower) {
+            onTerminalFailed(Text.literal("Network is down"));
+        }
+    }
+
+    public static void onTerminalFailed(Text reason) {
         final MinecraftClient client = MinecraftClient.getInstance();
-        PlayerListEntry entry = client.getNetworkHandler().getPlayerListEntry(client.player.getUuid());
-        int ping = entry == null ? 0 : entry.getLatency();
-        return 100 + ping;
+        final ClientPlayerEntity player = client.player;
+
+        lastFailedTerminalAttempt = System.currentTimeMillis();
+        closeTerminalScreen();
+        requestingTerminal = false;
+
+        Text message = Text.literal("Failed to open the extensions terminal, reason: ").append(reason);
+        player.sendMessage(message, true);
+    }
+
+    public static List<GridInventoryEntry> getTerminalEntries() {
+        Repo repo = ((Repo) ((MEStorageMenu) AE2Extensions.getTerminalScreenHandler()).getClientRepo());
+        try {
+            Field viewField = Repo.class.getDeclaredField("view");
+            viewField.setAccessible(true);
+            return (List<GridInventoryEntry>) viewField.get(repo);
+        } catch (NoSuchFieldException | IllegalAccessException e) {
+            e.printStackTrace();
+            return List.of();
+        }
     }
 
     public static ExtensionsState getExtensionsState() {
         long now = System.currentTimeMillis();
         if (!isHotkeyEnabled) {
             return ExtensionsState.DISABLED;
-        } else if (actions.isEmpty()) {
-            return isTerminalOpen() ? ExtensionsState.IDLE_OPEN_SCREEN : ExtensionsState.IDLE;
+        } else if (!isTerminalOpen() && !requestingTerminal) {
+            return ExtensionsState.OFF;
         } else if (requestingTerminal) {
             return ExtensionsState.AWAITING_SCREEN;
-        } else if (now - terminalScreenPacketTimestamp <= getScreenPacketCooldown()) {
-            return ExtensionsState.AWAITING_OPENING_COOLDOWN;
+        } else if (!(seenGuiDataSyncPackets >= 2 && seenMEInventoryUpdatePackets >= 1)) {
+            return ExtensionsState.AWAITING_TERMINAL_CONTENTS;
         } else if (now - lastFailedTerminalAttempt <= FAILED_TERMINAL_REQUEST_COOLDOWN) {
             return ExtensionsState.AWAITING_FAILED_COOLDOWN;
         } else {
-            return ExtensionsState.INVALID;
+            return ExtensionsState.ACTIVE;
         }
     }
 
     public enum ExtensionsState {
-        INVALID("Invalid State"),
         DISABLED("Disabled"),
-        IDLE("Idling"),
-        IDLE_OPEN_SCREEN("Idling with an open screen"),
+        OFF("Off"),
         AWAITING_SCREEN("Awaiting Screen Packet"),
-        AWAITING_OPENING_COOLDOWN("Waiting for the Opening Cooldown to be over"),
-        AWAITING_FAILED_COOLDOWN("Waiting for the Failed Cooldown to be over");
+        AWAITING_TERMINAL_CONTENTS(() -> String.format("Awaiting Terminal Contents Packets (%d/2 GUI Data, %d/1 ME Inventory)", seenGuiDataSyncPackets, seenMEInventoryUpdatePackets)),
+        AWAITING_FAILED_COOLDOWN(() -> String.format("Awaiting Failed Terminal Cooldown to be over (%ds left)", (FAILED_TERMINAL_REQUEST_COOLDOWN - (System.currentTimeMillis() - lastFailedTerminalAttempt)) / 1_000)),
+        ACTIVE("Extensions Terminal is active");
 
-        private final String displayName;
+        private final Supplier<String> displayNameSupplier;
 
         ExtensionsState(String displayName) {
-            this.displayName = displayName;
+            this.displayNameSupplier = () -> displayName;
+        }
+
+        ExtensionsState(Supplier<String> displayNameSupplier) {
+            this.displayNameSupplier = displayNameSupplier;
         }
 
         @Override
         public String toString() {
-            return displayName;
+            return displayNameSupplier.get();
         }
     }
 }

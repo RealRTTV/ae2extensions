@@ -22,5 +22,6 @@
     "minecraft": "${minecraft_version}",
     "ae2": "*",
     "fabric": "*"
-  }
+  },
+  "accessWidener": "ae2extensions.accesswidener"
 }

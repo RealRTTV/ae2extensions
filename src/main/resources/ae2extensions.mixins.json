@@ -8,7 +8,8 @@
     "GuiDataSyncPacketMixin",
     "MEInventoryUpdatePacketMixin",
     "SlotMixin",
-    "SpatialStorageCellItemMixin"
+    "SpatialStorageCellItemMixin",
+    "WirelessTerminalItemMixin"
   ],
   "client": [
     "ClientPlayNetworkHandlerMixin",

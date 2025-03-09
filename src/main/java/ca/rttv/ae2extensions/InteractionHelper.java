@@ -8,20 +8,20 @@ import io.netty.buffer.Unpooled;
 import it.unimi.dsi.fastutil.ints.Int2ObjectMaps;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.entity.player.PlayerInventory;
-import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.network.PacketByteBuf;
 import net.minecraft.network.packet.c2s.play.ClickSlotC2SPacket;
 import net.minecraft.network.packet.c2s.play.CustomPayloadC2SPacket;
 import net.minecraft.network.packet.c2s.play.UpdateSelectedSlotC2SPacket;
 import net.minecraft.screen.ScreenHandler;
-import net.minecraft.screen.slot.Slot;
 import net.minecraft.screen.slot.SlotActionType;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.collection.DefaultedList;
-import org.jetbrains.annotations.Nullable;
 
+import java.util.List;
 import java.util.OptionalInt;
+import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 public class InteractionHelper {
     /**
@@ -37,11 +37,10 @@ public class InteractionHelper {
      * <p>
      * {@code false} otherwise
      */
-    public static boolean clickInventorySlot(int slot) {
+    public static boolean clickInventorySlot(int slot, ScreenHandler handler) {
         if (!AE2Extensions.isTerminalActive()) return onTerminalInactive();
 
         final MinecraftClient client = MinecraftClient.getInstance();
-        final ScreenHandler handler = AE2Extensions.getTerminalScreenHandler();
 
         ItemStack cursorStack = handler.getCursorStack();
         ItemStack slotStack = handler.getSlot(slot).getStack();
@@ -61,20 +60,16 @@ public class InteractionHelper {
         if (cursorStack.isEmpty()) {
             handler.setCursorStack(slotStack);
             handler.getSlot(slot).setStack(ItemStack.EMPTY);
+        } else if (slotStack.isEmpty()) {
+            handler.setCursorStack(ItemStack.EMPTY);
+            handler.getSlot(slot).setStack(cursorStack);
+        } else if (ItemStack.canCombine(slotStack, cursorStack)) {
+            int slotStackCount = slotStack.getCount();
+            slotStack.setCount(Math.min(slotStack.getMaxCount(), slotStack.getCount() + cursorStack.getCount()));
+            cursorStack.setCount(slotStackCount + cursorStack.getCount() - slotStack.getCount());
         } else {
-            if (slotStack.isEmpty()) {
-                handler.setCursorStack(ItemStack.EMPTY);
-                handler.getSlot(slot).setStack(cursorStack);
-            } else {
-                if (ItemStack.canCombine(slotStack, cursorStack)) {
-                    int slotStackCount = slotStack.getCount();
-                    slotStack.setCount(Math.min(slotStack.getMaxCount(), slotStack.getCount() + cursorStack.getCount()));
-                    cursorStack.setCount(slotStackCount + cursorStack.getCount() - slotStack.getCount());
-                } else {
-                    handler.setCursorStack(slotStack);
-                    handler.getSlot(slot).setStack(cursorStack);
-                }
-            }
+            handler.setCursorStack(slotStack);
+            handler.getSlot(slot).setStack(cursorStack);
         }
 
         return true;
@@ -93,9 +88,8 @@ public class InteractionHelper {
      * <p>
      * {@code false} otherwise
      */
-    public static boolean inventorySlotOntoCursorStack(int slot, int quantity) {
+    public static boolean pickupStack(int slot, int quantity, ScreenHandler handler) {
         final MinecraftClient client = MinecraftClient.getInstance();
-        final ScreenHandler handler = AE2Extensions.getTerminalScreenHandler();
 
         if (!handler.getCursorStack().isEmpty()) {
             AE2Extensions.LOGGER.warn("Tried to interact with a filled cursor. ({})", getCallerMethodName());
@@ -165,7 +159,7 @@ public class InteractionHelper {
      * <p>
      * {@code false} otherwise
      */
-    public static boolean swapInventoryAndHotbarSlots(int slot, int hotbarSlot) {
+    public static boolean swapInventoryAndHotbarSlots(int slot, int hotbarSlot, ScreenHandler handler) {
         if (!PlayerInventory.isValidHotbarIndex(hotbarSlot)) {
             AE2Extensions.LOGGER.warn("Tried to interact with an invalid hotbar slot. ({})", getCallerMethodName());
             return false;
@@ -173,7 +167,6 @@ public class InteractionHelper {
         if (!AE2Extensions.isTerminalActive()) return onTerminalInactive();
 
         final MinecraftClient client = MinecraftClient.getInstance();
-        final ScreenHandler handler = AE2Extensions.getTerminalScreenHandler();
         final PlayerInventory inventory = client.player.getInventory();
 
         client.getNetworkHandler().sendPacket(new ClickSlotC2SPacket(handler.syncId, handler.getRevision(), slot + 21, hotbarSlot, SlotActionType.SWAP, handler.getCursorStack(), Int2ObjectMaps.emptyMap()));
@@ -227,11 +220,10 @@ public class InteractionHelper {
      * <p>
      * {@code false} otherwise
      */
-    public static boolean cursorStackIntoTerminal() {
+    public static boolean moveCursorStackIntoTerminal(ScreenHandler handler) {
         if (!AE2Extensions.isTerminalActive()) return onTerminalInactive();
 
         final MinecraftClient client = MinecraftClient.getInstance();
-        final ScreenHandler handler = AE2Extensions.getTerminalScreenHandler();
 
         if (handler.getCursorStack().isEmpty()) {
             AE2Extensions.LOGGER.warn("Tried to interact with an empty cursor. ({})", getCallerMethodName());
@@ -250,14 +242,8 @@ public class InteractionHelper {
     }
 
 
-    /**
-     * Gets the stack at the specified slot
-     * @param slot The slot to get from (inventory ordinal)
-     * @return The stack at the slot
-     */
-    public static ItemStack getStackFromInventorySlot(int slot) {
-        final DefaultedList<ItemStack> main = MinecraftClient.getInstance().player.getInventory().main;
-        return main.get(slot);
+    public static DefaultedList<ItemStack> getPlayerInventoryMain() {
+        return MinecraftClient.getInstance().player.getInventory().main;
     }
 
     /**
@@ -273,11 +259,10 @@ public class InteractionHelper {
      * <p>
      * {@code false} otherwise
      */
-    public static boolean inventorySlotIntoTerminal(int slot) {
+    public static boolean quickMoveIntoTerminal(int slot, ScreenHandler handler) {
         if (!AE2Extensions.isTerminalActive()) return onTerminalInactive();
 
         final MinecraftClient client = MinecraftClient.getInstance();
-        final ScreenHandler handler = AE2Extensions.getTerminalScreenHandler();
         ItemStack stack = handler.getSlot(slot).getStack();
 
         if (stack.isEmpty()) {
@@ -300,19 +285,60 @@ public class InteractionHelper {
         return true;
     }
 
-    public static boolean moveAllIntoTerminal(Item item) {
+    /**
+     * Moves all matching slot stacks from the inventory into the terminal
+     <p>
+     * <u>Will update the client and server</u>
+     * @param predicate Predicates which {@link ItemStack}s to move
+     * @return {@code true} if the AE2 Extensions terminal is active; {@code false} otherwise
+     */
+    public static boolean moveAllIntoTerminal(Predicate<ItemStack> predicate, ScreenHandler handler) {
         if (!AE2Extensions.isTerminalActive()) return onTerminalInactive();
 
         final MinecraftClient client = MinecraftClient.getInstance();
-        final DefaultedList<ItemStack> inventoryHandler = client.player.getInventory().main;
+        final DefaultedList<ItemStack> main = client.player.getInventory().main;
 
-        for (int i = 0; i < inventoryHandler.size(); i++) {
-            if (inventoryHandler.get(i).isOf(item)) {
-                if (!inventorySlotIntoTerminal(inventoryMainIdToTerminalId(i))) {
-                    return false;
+        for (int i = 0; i < main.size(); i++) {
+            if (predicate.test(main.get(i))) {
+                quickMoveIntoTerminal(inventoryMainIdToTerminalId(i), handler);
+            }
+        }
+        return true;
+    }
+
+
+    /**
+     * Quick moves all matching ItemStacks from the terminal into the inventory, filling them all
+     <p>
+     * <u>Will update the client and server</u>
+     * @param predicate The predicate for which {@link ItemStack}s to fill
+     * @param handler The screen handler for the terminal
+     * @param entries The terminal's entries
+     @return {@code true} if the AE2 Extensions terminal is active; {@code false} otherwise
+     */
+    public static boolean quickMoveFromTerminal(Predicate<ItemStack> predicate, ScreenHandler handler, Supplier<List<GridInventoryEntry>> entries) {
+        if (!AE2Extensions.isTerminalActive()) return onTerminalInactive();
+
+        final MinecraftClient client = MinecraftClient.getInstance();
+        final DefaultedList<ItemStack> main = getPlayerInventoryMain();
+
+        for (ItemStack stack : main) {
+            if (predicate.test(stack)) {
+                for (GridInventoryEntry entry : entries.get()) {
+                    if (entry.getWhat() instanceof AEItemKey key && ItemStack.canCombine(key.toStack(), stack)) {
+                        stack.setCount((int) Math.min(stack.getMaxCount(), stack.getCount() + entry.getStoredAmount()));
+
+                        PacketByteBuf buf = new PacketByteBuf(Unpooled.buffer());
+                        buf.writeInt(BasePacketHandler.PacketTypes.ME_INTERACTION.getPacketId());
+                        buf.writeInt(handler.syncId);
+                        buf.writeVarLong(entry.getSerial());
+                        buf.writeEnumConstant(InventoryAction.SHIFT_CLICK);
+                        client.getNetworkHandler().sendPacket(new CustomPayloadC2SPacket(new Identifier("ae2:m"), buf));
+                    }
                 }
             }
         }
+
         return true;
     }
 
@@ -355,11 +381,10 @@ public class InteractionHelper {
      * <p>
      * {@code false} otherwise
      */
-    public static boolean terminalSlotOntoCursor(GridInventoryEntry entry) {
+    public static boolean terminalSlotOntoCursor(GridInventoryEntry entry, ScreenHandler handler) {
         if (!AE2Extensions.isTerminalActive()) return onTerminalInactive();
 
         final MinecraftClient client = MinecraftClient.getInstance();
-        final ScreenHandler handler = AE2Extensions.getTerminalScreenHandler();
 
         if (!handler.getCursorStack().isEmpty()) {
             AE2Extensions.LOGGER.warn("Tried to interact with a filled cursor. ({})", getCallerMethodName());
@@ -380,6 +405,20 @@ public class InteractionHelper {
         handler.setCursorStack(key.toStack((int) Math.min(key.getMaxStackSize(), entry.getStoredAmount())));
 
         return true;
+    }
+
+    public static int getSlotToInsertIntoClientMain(ItemStack stack) {
+        final MinecraftClient client = MinecraftClient.getInstance();
+        final DefaultedList<ItemStack> main = client.player.getInventory().main;
+
+        for (int i = 0; i < main.size(); i++) {
+            ItemStack mainStack = main.get(i);
+            if (mainStack.isEmpty() || (ItemStack.canCombine(mainStack, stack) && mainStack.getCount() < mainStack.getMaxCount())) {
+                return i;
+            }
+        }
+
+        return -1;
     }
 
     public static OptionalInt inventorySlotIdToTerminalSlotId(int slot) {
@@ -407,9 +446,13 @@ public class InteractionHelper {
     }
 
     public static int inventoryMainIdToTerminalId(int slot) {
+        if (slot == -1) {
+            return -1;
+        }
+
         return slot + 21;
     }
-    
+
     private static boolean onTerminalInactive() {
         AE2Extensions.LOGGER.warn("Tried to interact with a closed terminal. ({})", getCallerMethodName());
         return false;

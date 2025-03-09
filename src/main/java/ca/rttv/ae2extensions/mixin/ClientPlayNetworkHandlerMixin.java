@@ -5,13 +5,12 @@ import ca.rttv.ae2extensions.actions.DevNullTerminalAction;
 import com.llamalad7.mixinextras.sugar.Share;
 import com.llamalad7.mixinextras.sugar.ref.LocalRef;
 import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.network.ClientPlayNetworkHandler;
 import net.minecraft.item.ItemStack;
 import net.minecraft.network.packet.s2c.play.CloseScreenS2CPacket;
 import net.minecraft.network.packet.s2c.play.GameMessageS2CPacket;
+import net.minecraft.network.packet.s2c.play.InventoryS2CPacket;
 import net.minecraft.network.packet.s2c.play.ScreenHandlerSlotUpdateS2CPacket;
-import net.minecraft.screen.ScreenHandler;
 import net.minecraft.screen.slot.Slot;
 import net.minecraft.text.TranslatableTextContent;
 import org.spongepowered.asm.mixin.Final;
@@ -36,21 +35,23 @@ public class ClientPlayNetworkHandlerMixin {
     }
 
     @Inject(method = "onScreenHandlerSlotUpdate", at = @At(value = "INVOKE", target = "Lnet/minecraft/network/NetworkThreadUtils;forceMainThread(Lnet/minecraft/network/packet/Packet;Lnet/minecraft/network/listener/PacketListener;Lnet/minecraft/util/thread/ThreadExecutor;)V", shift = At.Shift.AFTER))
-    private void onScreenHandlerSlotUpdateHead(ScreenHandlerSlotUpdateS2CPacket packet, CallbackInfo ci, @Share("oldScreenHandler") LocalRef<ScreenHandler> oldScreenHandler, @Share("oldScreen") LocalRef<Screen> oldScreen) {
-        if (AE2Extensions.isTerminalActive()) {
-            oldScreenHandler.set(client.player.currentScreenHandler);
-            oldScreen.set(client.currentScreen);
-            client.player.currentScreenHandler = AE2Extensions.getTerminalScreenHandler();
-            client.currentScreen = AE2Extensions.getTerminalScreen();
-        }
+    private void onScreenHandlerSlotUpdateHead(ScreenHandlerSlotUpdateS2CPacket packet, CallbackInfo ci) {
+        AE2Extensions.toggleTerminalScreen();
     }
 
     @Inject(method = "onScreenHandlerSlotUpdate", at = @At("RETURN"))
-    private void onScreenHandlerSlotUpdateTail(ScreenHandlerSlotUpdateS2CPacket packet, CallbackInfo ci, @Share("oldScreenHandler") LocalRef<ScreenHandler> oldScreenHandler, @Share("oldScreen") LocalRef<Screen> oldScreen) {
-        if (AE2Extensions.isTerminalActive()) {
-            client.player.currentScreenHandler = oldScreenHandler.get();
-            client.currentScreen = oldScreen.get();
-        }
+    private void onScreenHandlerSlotUpdateTail(ScreenHandlerSlotUpdateS2CPacket packet, CallbackInfo ci) {
+        AE2Extensions.toggleTerminalScreen();
+    }
+
+    @Inject(method = "onInventory", at = @At(value = "INVOKE", target = "Lnet/minecraft/network/NetworkThreadUtils;forceMainThread(Lnet/minecraft/network/packet/Packet;Lnet/minecraft/network/listener/PacketListener;Lnet/minecraft/util/thread/ThreadExecutor;)V", shift = At.Shift.AFTER))
+    private void onInventoryHead(InventoryS2CPacket packet, CallbackInfo ci) {
+        AE2Extensions.toggleTerminalScreen();
+    }
+
+    @Inject(method = "onInventory", at = @At("RETURN"))
+    private void onInventoryTail(InventoryS2CPacket packet, CallbackInfo ci) {
+        AE2Extensions.toggleTerminalScreen();
     }
 
     @Inject(method = "onScreenHandlerSlotUpdate", at = @At(value = "INVOKE", target = "Lnet/minecraft/network/NetworkThreadUtils;forceMainThread(Lnet/minecraft/network/packet/Packet;Lnet/minecraft/network/listener/PacketListener;Lnet/minecraft/util/thread/ThreadExecutor;)V", shift = At.Shift.AFTER))
@@ -70,9 +71,7 @@ public class ClientPlayNetworkHandlerMixin {
     @Inject(method = "onGameMessage", at = @At(value = "INVOKE", target = "Lnet/minecraft/network/NetworkThreadUtils;forceMainThread(Lnet/minecraft/network/packet/Packet;Lnet/minecraft/network/listener/PacketListener;Lnet/minecraft/util/thread/ThreadExecutor;)V", shift = At.Shift.AFTER))
     private void onGameMessage(GameMessageS2CPacket packet, CallbackInfo ci) {
         if (packet.overlay() && packet.content().getContent() instanceof TranslatableTextContent translate && Arrays.asList(AE2Extensions.FAILED_CONNECTION_TRANSLATES).contains(translate.getKey())) {
-            AE2Extensions.lastFailedTerminalAttempt = System.currentTimeMillis();
-            AE2Extensions.closeTerminalScreen();
-            AE2Extensions.requestingTerminal = false;
+            AE2Extensions.onTerminalFailed(packet.content());
         }
     }
 }
