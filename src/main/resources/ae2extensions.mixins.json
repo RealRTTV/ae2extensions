@@ -7,7 +7,8 @@
     "ClientPlayerEntityMixin",
     "GuiDataSyncPacketMixin",
     "MEInventoryUpdatePacketMixin",
-    "SlotMixin"
+    "SlotMixin",
+    "SpatialStorageCellItemMixin"
   ],
   "client": [
     "ClientPlayNetworkHandlerMixin",
